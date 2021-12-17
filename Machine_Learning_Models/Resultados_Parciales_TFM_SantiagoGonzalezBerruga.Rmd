@@ -1,0 +1,2237 @@
+---
+title: 'Diagnóstico de enfermedad hepática mediante técnicas de Aprendizaje automático y su implementación en una aplicación web'
+subtitle: 'Resultados Parciales. Trabajo Final del Máster'
+author: "Santiago González Berruga"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  bookdown::html_document2:
+    base_format: prettydoc::html_pretty
+    toc: true
+    theme: cayman
+    highlight: github
+    number_sections: false
+    
+params:
+  folder.data: "./data"
+  myfile: "ILPD.csv"
+  ind.train: 0.7
+
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NULL,
+                      warning = FALSE, message = FALSE, 
+                      fig.align="center", cache = TRUE)
+```
+
+```{r paquetes, include=FALSE}
+# Cargamos los paquetes
+library(knitr)
+# library(caret)
+# library(class)
+# library(e1071)
+# library(neuralnet)
+# library(NeuralNetTools)
+# library(kernlab)
+# library(C50)
+# library(randomForest)
+
+```
+
+
+
+\newpage
+
+
+# Lectura, exploración de los datos y obtención de los muestras de train y test:
+
+
+## Recopilación de los datos:
+
+Los datos empleados pertenecen al “Indian Liver Patient Dataset (ILPD)” de la *UCI Machine Learning Repository* en el enlace <https://archive.ics.uci.edu/ml/datasets/ILPD+%28Indian+Liver+Patient+Dataset%29>. En nuestro caso los datos se encuentran en el archivo `r params$myfile`. 
+
+Este conjunto de datos corresponde al análisis de varias características útiles para determinar enfermedad hepática. Desde el enlace al repositorio de la UCI podemos observar una descripción de los atributos:
+
+
+
+```{r variables.yeast, echo=FALSE}
+# Fortalezas
+variables <- c("Age","Gender","TB","DB","Alkphos","Sgpt","Sgot","TP","ALB","AG","Class")
+
+
+# Debilidades
+descripcion <- c("Edad del paciente",
+                 "Sexo del paciente",
+                 "Bilirrubina total",
+                 "Bilirubina directa",
+                 "Fosfatasa alcalina",
+                 "Alanina aminotransferasa",
+                 "Aspartato aminotransferasa",
+                 "Proteínas totales",
+                 "Albúmina",
+                 "Proporción de albúmina y globulina",
+                 "Tipo de clase: enfermedad hepática o no")
+
+
+# Tabla de fortalezas y debilidades
+tabla_descripcion <- data.frame(variables,descripcion)
+
+
+```
+
+```{r, echo=FALSE}
+knitr::kable(tabla_descripcion, col.names = c("Variables","Descripción"), caption = "Contenido y descripción del conjunto de datos ILPD")
+```
+
+
+Tras tener una idea general que cuales son los datos del fichero `r params$myfile` procedemos a cargar, explorar y preparar los datos:
+
+```{r Import_data1}
+# Cargamos los datos
+ILPD <- read.csv(file.path(params$folder.data,params$myfile), header=FALSE)
+
+```
+
+
+
+
+
+
+## Explorar y preparar los datos:
+
+Exploramos los datos y los preparamos para realizar los análisis posteriores. Primero nombramos correctamente las columnas/variables del conjunto de datos.
+
+```{r variables}
+# Nombramos correctamente las columnas del conjunto de datos
+variables <- c("Age","Gender","TB","DB","Alkphos","Sgpt","Sgot","TP","ALB","AG","Class")
+colnames(ILPD) <-  variables
+```
+
+
+```{r dimensiones.NA, eval=FALSE, include=FALSE}
+# Dimensiones
+dim(ILPD)
+
+# Valores NA:
+table(is.na(ILPD))
+
+```
+
+
+El conjunto de datos `ILPD` está formado por `r dim(ILPD)[2]` variables con `r dim(ILPD)[1]` registros y contiene `r table(is.na(ILPD))[[2]]` valores NA. Mostramos los primeros 6 registros del conjunto ILPD para familiarizarnos con los datos:
+
+```{r, echo=FALSE}
+# Primeros 6 registros
+# head(ILPD)
+knitr::kable(head(ILPD), align = "l",
+             caption= "Primeros 6 registros del conjunto de datos ILPD.")
+```
+
+
+
+
+
+
+
+### Tipos de variables
+
+A continuación, comprobamos la estructura de las variables y observamos que todas se consideran numéricas salvo la variable `Gender` que es de tipo caracter, Sin embargo, las variables `Gender` y `Class` deben ser categóricas, por lo que hay que transformaras a factor ya que es el objeto de R adecuado.
+
+```{r str.ILPD}
+# Estructura del conjunto de datos:
+str(ILPD)
+```
+
+
+Transformamos la variable `class` a factor ya que de esta forma nos servirá para la mayoría de algoritmos a emplear. Tiene dos niveles Enferdedad hepática (*LD* por sus sigles en inglés) y no enfermedad (*H* de Healthy en inglés).
+
+```{r class.factor}
+# Variable class es un factor con dos niveles:
+ILPD$Class <- factor(ILPD$Class, levels = c(1,2), labels = c("LD","H"))
+```
+
+La variable `Gender` (Género) debería ser categórica con 2 niveles, *Female* (Femenino), *Male* (Masculino), por lo que tenemos que codificarla correctamente.
+
+```{r gender.factor}
+# Variable class es un factor con dos niveles:
+ILPD$Gender <- factor(ILPD$Gender, levels = c("Female","Male"))
+```
+
+
+Comprobamos que los cambios se han efectuado correctamente:
+
+```{r str.ILPD.2}
+# Estructura del conjunto de datos:
+str(ILPD)
+```
+
+Observamos que ahora todas las variables estan correctamente guardadas en función de los datos que contienen.
+
+
+
+
+
+
+### Número de observaciones y valores ausentes
+
+Tras guardar los datos correctamente en R, comprobamos satisfactoriamente que el número de muestras para cada clase coincide con los proporcionados en la descripción de los datos, es decir, 416 registros de pacientes hepáticos y 167 registros de pacientes no hepáticos.
+
+```{r, echo=FALSE}
+# Cantiadad de muestras de cada clase
+knitr::kable(t(table(ILPD$Class)), align = "c",
+             caption= "Cantidad de muestras de cada clase en el conjunto de datos ILPD.")
+```
+
+El procentaje de muestras de cada clase en el conjunto de datos es:
+
+```{r, echo=FALSE}
+# Porcentaje de muestras de cada clase
+knitr::kable(t(round(prop.table(table(ILPD$Class)),2)), align = "c",
+             caption= "Poncentaje de muestras de cada clase en el conjunto de datos ILPD.")
+```
+
+
+También comprobamos que el número de muestras de cada género coinde con las esperadas según la descripción del conjunto de datos, es decir, 441 registros de pacientes masculinos y 142 registros de pacientes femeninas.
+
+```{r, echo=FALSE}
+# Cantiadad de muestras da cada género
+knitr::kable(t(table(ILPD$Gender)), align = "c",
+             caption= "Cantidad de muestras de cada género en el conjunto de datos ILPD.")
+```
+
+
+
+Estudiamos la distribución de los valores NA en conjunto de datos ILPD y observamos que los `r table(is.na(ILPD))[[2]]` pertenecen a la variable `AG`. 
+
+```{r, echo=FALSE }
+## Vemos que variables presentan valores NA
+# apply(ILPD, 2, function(x){sum(is.na(x))})
+knitr::kable(t(apply(ILPD, 2, function(x){sum(is.na(x))})), align = "l",
+             caption= "Distribución de los valores NA en conjunto de datos ILPD.")
+```
+
+
+La forma de tratar los valores faltantes es importante y tenemos varias opciones:
+
+- Eliminar aquellas observaciones que estén incompletas.
+
+- Eliminar aquellas variables que contengan valores ausentes.
+
+- Tratar de estimar los valores ausentes empleando el resto de información disponible (imputación).
+
+Las primeras dos opciones, aunque sencillas, suponen perder información. La eliminación de observaciones solo puede aplicarse cuando se dispone de muchas y el porcentaje de registros incompletos es muy bajo. En el caso de eliminar variables, el impacto dependerá de cuanta información aporten dichas variables al modelo. En el tercer caso, cuando se emplea imputación, es muy importante tener en cuenta el riesgo que se corre al introducir valores en predictores que tengan mucha influencia en el modelo. 
+
+En nuestro caso, al tratarse solamente 4 valores ausentes eliminaremos dichos registros, ya que al tratarse de datos clínicos no queremos arriesgarnos a imputar dichos valores. 
+
+
+En los siguientes apartados estudiamos más a fondo la distribución de las variables.
+
+```{r save.data, include=FALSE}
+# Guardamos el conjunto de datos como objeto de R
+save(ILPD, file = file.path(params$folder.data,"ILPD.RData"))
+
+```
+
+
+### Distribución variable respuesta
+
+
+Cuando se crea un modelo, es muy importante estudiar la distribución de la variable respuesta, ya que, a fin de cuentas, es lo que nos interesa predecir. En nuestro casos obserbamos que las clases están desbalanceadas.
+
+```{r, echo=FALSE, fig.height=2.52, fig.width=5.5, fig.cap="Gráfico de barras variable respuesta."}
+## Gráfico de barras:
+library(ggplot2)
+
+ggplot(data = ILPD, aes(x = Class, y = ..count.., fill = Class)) +
+  geom_bar() +
+  geom_text(aes(label = ..count..), stat = "count", vjust = 1.5, colour = "white") +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  labs(title = "Enfermedad hepática") +
+  theme_bw() +
+  theme(legend.position = "right")
+```
+
+
+Para que un modelo predictivo sea útil, debe de tener un porcentaje de acierto superior a lo esperado por azar o a un determinado nivel basal. En problemas de clasificación, el nivel basal es el que se obtiene si se asignan todas las observaciones a la clase mayoritaria (la moda).
+
+```{r porcen.min}
+# Porcentaje de aciertos si se predice para todas las observaciones que padecen LD.
+n_observaciones <- nrow(ILPD)
+predicciones <- rep(x = "LD",  n_observaciones)
+mean(predicciones == ILPD$Class) * 100 # porcentaje mínimo que hay que intentar superar con los modelos predictivos
+
+```
+
+En base a estos datos, el porcentaje mínimo que hay que intentar superar con los modelos predictivos es del `r round(mean(predicciones == ILPD$Class) * 100,2)`%.
+
+
+
+
+
+
+
+### Distribución de las variables contínuas
+
+
+Preparamos un conjunto de datos sin valores ausentes para poder explorar los datos de las variables contínuas, ya que algunos análisis no soportan los valores ausentes. Creamos un nuevo conjunto de datos llamado `data4` eliminando los registos con valores NA. Como tenemos un número adecuado registros y pocos valores faltantes, podemos eliminar los registros que contengan valores NA y trabajar solamente con los registros completos ya que no perderemos mucha información.
+  
+```{r data4}
+## Eliminamos los registros con NAs 
+data4 <- ILPD[complete.cases(ILPD),]
+```
+
+```{r save.data4, include=FALSE}
+# Guardamos el nuevo conjunto de datos como csv:
+write.csv(data4, file.path(params$folder.data,"data4.csv"))
+
+# Guardamos el conjunto de datos como objeto de R
+save(data4, file = file.path(params$folder.data,"data4.RData"))
+
+```
+
+
+El nuevo conjunto de datos `data4` está formado por `r dim(data4)[2]` variables y `r dim(data4)[1]` registros completos. Mostramos los primeros 6 registros:
+  
+```{r, echo=FALSE}
+# Primeros 6 registros
+knitr::kable(head(data4), align = "l",
+             caption= "Primeros 6 registros del conjunto data4.")
+```
+
+
+Tras eliminar los valores faltantes comprobamos el número de registros en las variables categóricas. 
+
+Comprobamos que el número de muestras para cada clase:
+  
+```{r, echo=FALSE}
+# Cantidad de muestras de cada clase
+knitr::kable(t(table(data4$Class)), align = "c",
+             caption= "Cantidad de muestras de cada clase en el conjunto de datos data4.")
+```
+
+El procentaje de muestras de cada clase en el conjunto de datos es:
+  
+```{r, echo=FALSE}
+# Proporción de muestras de cada clase
+knitr::kable(t(round(prop.table(table(data4$Class)),2)), align = "c",
+             caption= "Poncentaje de muestras de cada clase en el conjunto de datos data4.")
+```
+
+Comprobamos el número de muestras de cada género:
+  
+```{r, echo=FALSE}
+# Cantiadad de muestras da cada género
+knitr::kable(t(table(data4$Gender)), align = "c",
+             caption= "Cantidad de muestras de cada género en el conjunto de datos data4.")
+```
+
+
+Ante estos datos, observamos que el porcentaje de muestras de cada clase apenas ha variado y que el porcentaje de muestras por género es idéntico. Esto se debe de los 4 registros eliminados había dos de cada clase y género permitiendo mantener el mismo porcentaje de clases que el conjunto de datos original.
+
+
+
+
+
+Primero realizamos un breve resumen estadístico de las variables numéricas del conjunto sin valores ausentes:
+
+```{r, echo=FALSE}
+## Resumen estadístico variables numéricas
+stats <- data.frame()
+num_index <- as.vector(which(sapply(data4, is.numeric)==TRUE))
+for (i in num_index) {
+  stat <- summary(data4[[i]])
+  stats <- rbind(stats,stat)
+}
+colnames(stats) <- names(stat)
+rownames(stats) <- colnames(data4[num_index])
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de las variables numéricas")
+
+```
+
+Observamos que el resumen estadístico de las variables numéricas es normal y se corresponde con lo esperado respecto a la descripción del conjunto de datos. Por ejemplo, el rango superior de la variable `Age` es correcto ya que cualquier paciente cuya edad supere los 89 años figura como "de 90 años". Una cosa a tener en cuenta es que el rango de las variables es muy distinto, por lo que hay que considerar normalizar los datos en caso de que el algoritmo lo requiera.
+
+Debido a que no trabajamos con una gran cantidad de variables, podemos realizar una exploración gráfica de las variables numéricas mediante distintos tipos de gráficos. 
+
+
+Primero realizamos una exploración general de todas las variables numéricas mediante boxplots.
+
+```{r, echo=FALSE, fig.height=2.52, fig.width=5.5, fig.cap="Boxplots de las variables numéricas."}
+## Boxplots
+par(oma=c(0,0,0,0), mar=c(2,2,0.5,0))
+
+boxplot(ILPD[num_index], col="lightblue")
+```
+
+Como se observa en el gráfico el rango de variabilidad entre variables es muy grande por eso en algunos casos con rango de valores muy estrechos queda reducida la caja a una linea. Además, se observa un gran número de valores extremos en algunas variables.
+
+
+También realizamos los gráficos de dispersión enfrentando todas las variables numéricas entre sí:
+
+```{r, echo=FALSE, fig.height=6, fig.width=10, fig.cap="Gráficos de dispersión entre las variables numéricas."}
+## Graficos de dispersión entre variables:
+pairs(ILPD[num_index], col=ILPD$Class, pch=20, oma=c(3,3,3,12))
+par(xpd = TRUE)
+legend("topright", pch=16, c("LD","H"), col=1:2, cex=0.8)
+```
+
+En estos gráficos obervamos algunas variables parecen estar correlacionadas y que en algunos casos se observa una diferencias en la distribución de las nubes de puntos de las clases LD y H.
+
+
+A continuación vamos a estudiar la distribución de las variables contínuas mediante histogramas:
+
+```{r, echo=FALSE, fig.height=3.5, fig.width=6, fig.cap="Histogramas de las variables numéricas."}
+## Histogramas 
+par(mfrow=c(3,3), oma=c(0,0,0,0), mar=c(4,4,1,1))
+
+for (i in num_index) {
+  hist(ILPD[[i]], 
+       xlab = colnames(ILPD[i]),
+       ylab = "Frecuencia",
+       main = colnames(ILPD[i]))
+}
+
+par(mfrow=c(1,1))
+```
+
+
+Observamos que las variables `TB`, `DB`, `Alkphos`, `Sgpt` y `Sgot` tienen una distribución asimétrica. Este tipo de distribución suele visualizarse mejor tras una trasformación logarítmica. Por lo tanto, volvemos a estudiar la distribución de las variables teniendo esto en cuenta, pero en lugar de realizar un histograma, representamos cada variable en un gráfico de densidad y boxplot en función de la clase a la que pertenecen los datos. También realizamos un breve resumen estadístico de cada variable en función de la clase.
+
+
+**Age**
+
+```{r, echo=FALSE, fig.cap="Gráficos variable Age."}
+library(ggplot2)
+library(ggpubr)
+
+## Variable Age
+p1 <- ggplot(data = ILPD, aes(x = Age, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = Age, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("Age", size = 15))
+final_plot
+```
+
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable Age por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(Age),
+            mediana = median(Age),
+            min = min(Age),
+            max = max(Age))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable Age por clase.")
+```
+
+
+
+
+
+**TB**
+
+
+```{r, echo=FALSE, fig.cap="Gráficos variable TB."}
+## Variable log(TB)
+p1 <- ggplot(data = ILPD, aes(x = log(TB), fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = log(TB), color = Class)) +
+      geom_boxplot(outlier.shape = NA) +
+      geom_jitter(alpha = 0.3, width = 0.15) +
+      scale_color_manual(values = c("gray50", "orangered2")) +
+      theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("log(TB)", size = 15))
+final_plot
+
+```
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable TB por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(TB),
+            mediana = median(TB),
+            min = min(TB),
+            max = max(TB))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable TB por clase.")
+```
+
+
+
+**DB**
+
+```{r, echo=FALSE, fig.cap="Gráficos variable DB."}
+## Variable log(DB)
+p1 <- ggplot(data = ILPD, aes(x = log(DB), fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = log(DB), color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("log(DB)", size = 15))
+final_plot
+
+```
+
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable DB por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(DB),
+            mediana = median(DB),
+            min = min(DB),
+            max = max(DB))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable DB por clase.")
+```
+
+
+
+**Alkphos**
+
+```{r, echo=FALSE, fig.cap="Gráficos variable Alkphos."}
+## Variable log(Alkphos)
+p1 <- ggplot(data = ILPD, aes(x = log(Alkphos), fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = log(Alkphos), color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("log(Alkphos)", size = 15))
+final_plot
+
+```
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable Alkphos por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(Alkphos),
+            mediana = median(Alkphos),
+            min = min(Alkphos),
+            max = max(Alkphos))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable Alkphos por clase.")
+```
+
+
+
+**Sgpt**
+
+```{r , echo=FALSE, fig.cap="Gráficos variable Sgpt."}
+## Variable log(Sgpt)
+p1 <- ggplot(data = ILPD, aes(x = log(Sgpt), fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = log(Sgpt), color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("log(Sgpt)", size = 15))
+final_plot
+
+```
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable Sgpt por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(Sgpt),
+            mediana = median(Sgpt),
+            min = min(Sgpt),
+            max = max(Sgpt))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable Sgpt por clase.")
+```
+
+
+
+
+**Sgot**
+
+```{r , echo=FALSE, fig.cap="Gráficos variable Sgot."}
+## Variable log(Sgot)
+p1 <- ggplot(data = ILPD, aes(x = log(Sgot), fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = log(Sgot), color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("log(Sgot)", size = 15))
+final_plot
+
+```
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable Sgot por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(Sgot),
+            mediana = median(Sgot),
+            min = min(Sgot),
+            max = max(Sgot))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable Sgot por clase.")
+```
+
+
+
+
+**TP**
+
+```{r, echo=FALSE, fig.cap="Gráficos variable TP."}
+## Variable TP
+p1 <- ggplot(data = ILPD, aes(x = TP, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = TP, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("TP", size = 15))
+final_plot
+
+```
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable TP por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(TP),
+            mediana = median(TP),
+            min = min(TP),
+            max = max(TP))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable TP por clase.")
+```
+
+
+
+
+**ALB**
+
+```{r, echo=FALSE, fig.cap="Gráficos variable ALB."}
+## Variable ALB
+p1 <- ggplot(data = ILPD, aes(x = ALB, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = ALB, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("ALB", size = 15))
+final_plot
+
+```
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable ALB por clase
+library(dplyr)
+
+stats <- ILPD %>% group_by(Class) %>%
+  summarise(media = mean(ALB),
+            mediana = median(ALB),
+            min = min(ALB),
+            max = max(ALB))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable ALB por clase.")
+```
+
+
+
+
+
+**AG**
+
+```{r, echo=FALSE, fig.cap="Gráficos variable AG."}
+## Variable AG
+p1 <- ggplot(data = ILPD, aes(x = AG, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_rug(aes(color = Class), alpha = 0.5) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  coord_flip() +
+  theme_bw()
+p2 <- ggplot(data = ILPD, aes(x = Class, y = AG, color = Class)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.3, width = 0.15) +
+  scale_color_manual(values = c("gray50", "orangered2")) +
+  theme_bw()
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot <- annotate_figure(final_plot, top = text_grob("AG", size = 15))
+final_plot
+
+```
+
+```{r, echo=FALSE}
+## Resumen estadístico de la variable AG por clase
+library(dplyr)
+
+stats <- data4 %>% group_by(Class) %>%
+  summarise(media = mean(AG),
+            mediana = median(AG),
+            min = min(AG),
+            max = max(AG))
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de la variable AG por clase.")
+```
+
+
+
+
+
+
+También realizamos una tabla con el resumen estadístico de todas las variables continuas por clase:
+
+```{r, echo=FALSE}
+## Resumen estadístico variables numéricas por clase
+stats <- data.frame()
+num_index <- as.vector(which(sapply(data4, is.numeric)==TRUE))
+for (i in num_index) {
+  stat <- tapply(data4[[i]], data4$Class, summary)
+  stats <- rbind(stats, unlist(stat[1]), unlist(stat[2]))
+}
+colnames(stats) <- names(stat[[1]])
+a <- rep(colnames(data4[num_index]), times = 1, each = 2)
+b <- rep(c("LH", "H"), 9)
+rownames(stats) <- paste(a,b)
+
+knitr::kable(stats, digits = 2, align = "l",
+             caption= "Estadísticas descriptivas de las variables numéricas por clase.")
+```
+
+
+Los datos parecen ser correctos, por lo que podemos continuar con el análisis.
+
+
+
+
+
+### Distribución de las variables cualitativas:
+
+
+Estudiamos la distribución de la variable Gender:
+
+
+```{r, echo=FALSE, fig.cap="Distribución variable Gender."}
+# Gráfico de barras variable Gender
+ggplot(data = ILPD, aes(x = Gender, y = ..count.., fill = Class)) +
+  geom_bar() +
+  labs(title = "Gender") +
+  scale_fill_manual(values = c("gray50", "orangered2")) +
+  geom_text(aes(label = ..count..), stat = "count", vjust = 2, colour = "white") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+
+
+```{r, echo=FALSE}
+# Tabla de frecuencias relativas de clases por sexo
+tabla.gender <- prop.table(table(data4$Gender, data4$Class), margin = 1) %>% round(digits = 2)
+
+# Cantiadad de muestras da cada clase
+knitr::kable(tabla.gender, align = "c",
+             caption= "Poncentaje de muestras de cada clase por género en el conjunto de datos ILPD.")
+```
+
+
+
+
+
+
+### Importancia de las variables:
+
+
+La representación gráfica de la distribución de las variables en función de si los pacientes sufren enfermedad hepática o no, ayuda a tener una idea de qué variables pueden ser buenos predictores para el modelo y cuales no aportan información o la que aportan esredundante. Aunque la creación de un buen modelo debe entenderse como un proceso iterativo, en el que se van ajustando y probando distintos modelos, existen ciertas pistas que pueden ayudar a realizar una selección inicial adecuada.
+
+
+
+**Correlación entre variables continuas**
+
+Si dos variables numéricas están muy correlacionadas, añaden información redundante al modelo, por lo tanto, noconviene incorporar ambas. Si esto ocurre, se puede: excluir aquella que, acorde al criterio del analista, no estárealmente asociada con la variable respuesta; o combinarlas para recoger toda su información en una única nuevavariable, por ejemplo, con un
+PCA.
+
+```{r  cor.data4}
+# Matriz de correlación (correlación de Pearson)
+library(ggcorrplot)
+ggcorrplot(cor(ILPD[num_index]), method="square",
+           type="lower", lab=TRUE) + 
+  ggtitle("Correlograma del conjunto ILPD") + 
+  theme_minimal()
+
+cor_pmat(ILPD[num_index]) # p-valor Pearson
+
+# Gráfico de disperión y matriz de correlación 
+library(GGally)
+ggpairs(ILPD[num_index])
+
+# Test de Pearson 
+cor.test(ILPD$DB, ILPD$TB)
+
+```
+
+Observamos varios casos con una correlación superior a 0,5 lo que puede indicar que alguna de las variables implicadas no aporte nueva información al modelo. Por lo tanto, hay que prestar atención a estas variables. Consideramos eliminar las variables que presenten una correlación superrior a 0.7 y que en base a sus características consideramos que son `DB`, `Sgot` y `ALB`. Consideramos estás variables porque son menos específicas de enfermedad hepática, ya que pueden ser producidas por otras partes del cuermo que no son el hígado y que su liberación no sea causada por enfermedad hepática. Por lo tanto, a la hora de crear los modelos comprobaremos si al eliminar estas variables el rendimiento mejora.
+
+
+**Variables con varianza cero o próxima a cero**
+
+Si una variable tiene varianza igual o próxima a cero (su valor es el mismo o casi el mismo para todas las observaciones) añade al modelo más ruido que información, por lo que suele ser conveniente excluirla.
+
+
+```{r var.data4}
+# Varianza de las variables numéricas
+round(apply(data4[num_index], 2, var),2)
+
+library(caret)
+nearZeroVar(data4[num_index], saveMetrics = TRUE)
+```
+
+Entre los predictores incluidos en el modelo, no se detecta ninguno con varianza cero o próxima a cero.
+
+
+
+**Importancia de las variables con Random Forest**
+
+Otra estrategia ampliamente extendida para estudiar la importancia de variables es el empleo de
+Random Forest, ya que este algoritmo permite realzar una clasificación de los predictores según su importancia en base a 
+
+```{r}
+## Importancia de las variables con Random Forest:
+library(randomForest)
+library(tibble)
+
+modelo_randforest <- randomForest(formula = Class ~ . ,
+                                  data = data4,
+                                  mtry = 5,
+                                  importance = TRUE, 
+                                  ntree = 1000) 
+
+# he nclass + 1st column is the mean descrease in accuracy over 
+# all classes. The last column is the mean decrease in Gini index.
+importancia <- as.data.frame(modelo_randforest$importance)
+importancia <- rownames_to_column(importancia,var = "variable")
+
+library(ggpubr)
+
+p1 <- ggplot(data = importancia, aes(x = reorder(variable, MeanDecreaseAccuracy),
+                                     y = MeanDecreaseAccuracy,
+                                     fill = MeanDecreaseAccuracy)) +
+  labs(x = "variable", title = "Reducción de Accuracy") +
+  geom_col() +
+  coord_flip() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+p2 <- ggplot(data = importancia, aes(x = reorder(variable, MeanDecreaseGini),
+                                     y = MeanDecreaseGini,
+                                     fill = MeanDecreaseGini)) +
+  labs(x = "variable", title = "Reducción de pureza (Gini)") +
+  geom_col() +
+  coord_flip() +
+  theme_bw() +
+  theme(legend.position = "bottom")
+ggarrange(p1, p2)
+```
+
+Los análisis difieren en cuanto a qué variables son más importantes. Las comunes con mayor importancia son `Sgpt`, `Sgot`, `TB`, `Age` y `Alkphos`.
+
+
+
+<!-- ### Conclusión análisis exploratorio: -->
+
+
+
+
+
+
+
+
+
+
+
+
+### División de los datos en entrenamiento y test:
+
+
+Conjuntos train y test
+
+```{r train.test}
+# Excluimos los registros con NAs
+ILPD_less <- ILPD[complete.cases(ILPD), ]
+
+# Partici?n de los datos train/test
+library(caret)
+set.seed(123)
+## Muestras que pertenecen al conjunto train
+in_train <- createDataPartition(ILPD_less$Class,
+                                p = 0.7, list = FALSE)
+
+## Creamos los conjuntos train y test:
+data_train <- ILPD_less[in_train,]
+data_test <- ILPD_less[-in_train,]
+
+## Variable objetivo por conjunto de datos
+train_labels <- ILPD_less[in_train,length(ILPD_less)]
+test_labels <- ILPD_less[-in_train,length(ILPD_less)]
+```
+
+Este tipo de reparto estratificado asegura que el conjunto de entrenamiento y el de test sean similares en cuanto a la variable respuesta, sin embargo, no garantiza que ocurra lo mismo con los predictores. Por ejemplo, en un set de datos con 100 observaciones, un predictor binario que tenga 90 observaciones de un grupo y solo 10 de otro, tiene un alto riesgo de que,en alguna de las particiones, el grupo minoritario no tenga representantes. Si esto ocurre en el conjunto de entrenamiento,algunos algoritmos darán error al aplicarlos al conjunto de test, ya que no entenderán el valor que se les está pasando. Este problema puede evitarse eliminando variables con varianza próxima a cero.
+
+
+De los `r dim(data4)[1]` registros iniciales, el conjunto *train* (`data_train`) contiene `r dim(data_train)[1]` registros y el conjunto *test* (`data_test`) contiene `r dim(data_test)[1]` registros. Los porcentajes parecen indicar que los datos se han dividido equitativamente entre los subconjuntos de datos.
+
+
+```{r, echo=FALSE}
+# Confirmamos que los subconjuntos son representativos del
+# conjunto completo de datos
+prob_train <- prop.table(table(train_labels))
+prob_test <- prop.table(table(test_labels))
+
+prob <- as.data.frame(rbind(prob_train,prob_test))
+row.names(prob) <- c("% Train", "% Test")
+
+knitr::kable(prob, align = "c", digits = 2,
+             caption = "Porcentaje de cada tipo de localización en los conjuntos train y test.")
+```
+
+
+
+
+## Preprocesar los datos:
+
+
+```{r}
+# Preparamos los conjuntos de datos para que sean preprocesados
+data_train_prep <- data_train
+data_test_prep  <- data_test
+```
+
+
+
+### Eliminar variables con varianza 0 o próxima:
+
+```{r}
+## Se crea un objeto recipe() con la variable respuesta y los predictores. 
+library(recipes)
+objeto_recipe <- recipe(formula = Class ~ .,
+                        data =  data_train_prep)
+objeto_recipe
+
+# Eliminamos variables con varianza 0 o próxima
+# objeto_recipe <- objeto_recipe %>% step_nzv(all_numeric_predictors())
+objeto_recipe <- objeto_recipe %>% step_nzv(all_predictors())
+objeto_recipe
+```
+
+
+
+
+### Normalización de los datos:
+
+Normalizamos por medio de la estandarización min-max de modo que se encuentren en el rango [0,1].
+
+```{r normalizar}
+## Normalización de los datos
+objeto_recipe <- objeto_recipe %>% step_range(all_numeric_predictors())
+objeto_recipe
+
+```
+
+
+
+### Binarización de variables cualitativas:
+
+La binarización consiste en crear nuevas variables dummy con cada uno de los niveles de las variables cualitativas.
+
+```{r binarizar}
+# Binarizamos las variables cualitativas
+objeto_recipe <- objeto_recipe %>% step_dummy(all_nominal(), - all_outcomes())
+objeto_recipe
+```
+
+
+
+### Conjuntos train y test preprocesados
+
+Aplicamos los cambios guardados en el objeto recipe a los conjuntos train y test.
+
+```{r train.recipe}
+## Entrenar el objeto recipe
+trained_recipe <- prep(objeto_recipe, training = data_train)
+trained_recipe
+
+## Se aplican las transformaciones al conjunto de entrenamiento y de test
+data_train_prep <- bake(trained_recipe, new_data = data_train)
+data_test_prep  <- bake(trained_recipe, new_data = data_test)
+
+glimpse(data_train_prep)
+```
+
+
+Tras el preprocesado de los datos, se han generado un total de 11 variables (10 predictores y la variable respuesta).
+
+
+
+## Selección de predictores:
+
+
+Cuando se entrena un modelo, es importante incluir como predictores únicamente aquellas variables que están realmente relacionadas con la variable respuesta, ya que son estas las que contienen información útil para el modelo. Incluir un exceso de variables suele conllevar una reducción de la capacidad predictiva del modelo cuando se expone a nuevos datos (*overfitting*). Aunque para este caso de estudio, el número de predictores es considerablemente reducido, la selección de predictores puede suponer la diferencia entre un modelo normal y uno muy bueno.
+
+
+Algunos algoritmos de machine learning (random forest, lasso, boosting…) contienen sus propias estrategias para seleccionar predictores, de ahí que sean modelos tan versátiles. A parte de estos, los métodos para reducir el número de predictores previo ajuste del modelo pueden agruparse en dos categorías: métodos wrapper y métodos de filtrado.
+
+
+
+Los métodos wrapper evalúan múltiples modelos, generados mediante la incorporación o eliminación de predictores, con la finalidad de identificar la combinación óptima que consigue maximizar la capacidad del modelo. Pueden entenderse como algoritmos de búsqueda que tratan a los predictores disponibles como valores de entrada y utilizan una métrica del modelo, por ejemplo, su error de predicción, como objetivo de la optimización.
+
+Los métodos basados en filtrado evalúan la relevancia de los predictores fuera del modelo para, posteriormente, incluir únicamente aquellos que pasan un determinado criterio. Se trata por lo tanto de analizar la relación que tiene cada predictor con la variable respuesta.
+
+Ambas estrategias, wrapper y filtrado, tienen ventajas y desventajas. Los métodos de filtrado son computacionalmente más rápidos por lo que suelen ser la opción factible cuando hay cientos o miles de predictores, sin embargo, el criterio de selección no está directamente relacionado con la efectividad del modelo. Además, en la mayoría de casos, los métodos de filtrado evalúan cada predictor de forma individual, por lo que no contemplan interacciones y pueden incorporar predictores redundantes (correlacionados). Los métodos wrapper, además de ser computacionalmente más costosos, para evitar overfitting, necesitan recurrir a validación cruzada o bootstrapping, por lo que requieren un número alto de observaciones. A pesar de ello, si se cumplen las condiciones, suelen conseguir una mejor selección.
+
+
+### Métodos wrapper
+
+En nuestro caso, el paquete caret incorpora métodos wrapper basados en eliminación recursiva.
+
+La eliminación recursiva es una estrategia muy práctica para evitar comprobar todas las posibles combinaciones de variables (búsqueda exhaustiva), que es muy costosa computacionalmente.
+
+Realizamos una eliminación recursiva mediente **Random Forest y Bootstraping**:
+
+
+```{r select.var.rf}
+# Eliminación recursiva mediante Random Forest y Bootstraping
+
+# Tamaño de los conjuntos de predictores analizados
+subsets <- c(1:10)
+
+# Número de resamples para el proceso de bootstrapping
+repeticiones <- 30
+
+# Se crea una semilla para cada repetición de validación. Esto solo es necesario si
+# se quiere asegurar la reproducibilidad de los resultados, ya que la validación
+# cruzada y el bootstrapping implican selección aleatoria.
+
+# El número de semillas necesarias depende del número total de repeticiones: 
+# Se necesitan B+1 elementos donde B es el número total de particiones (CV) o
+# resampling (bootstrapping). Los primeros B elementos deben ser vectores formados
+# por M números enteros, donde M es el número de modelos ajustados, que en este caso
+# se corresponde con el número de tamaños. El último elemento solo necesita un único
+# número para ajustar el modelo final.
+set.seed(123)
+seeds <- vector(mode = "list", length = repeticiones + 1)
+for (i in 1:repeticiones) {
+  seeds[[i]] <- sample.int(1000, length(subsets))
+} 
+seeds[[repeticiones + 1]] <- sample.int(1000, 1)
+
+# Se crea un control de entrenamiento donde se define el tipo de modelo empleado
+# para la selección de variables, en este caso random forest, la estrategia de
+# resampling, en este caso bootstrapping con 30 repeticiones, y las semillas para
+# cada repetición. Con el argumento returnResamp = "all" se especifica que se
+# almacene la información de todos los modelos generados en todas las repeticiones.
+ctrl_rfe <- rfeControl(functions = rfFuncs, method = "boot", number = repeticiones,
+                       returnResamp = "all", allowParallel = TRUE, verbose = FALSE,
+                       seeds = seeds)
+
+# Se ejecuta la eliminación recursiva de predictores
+set.seed(342)
+rf_rfe <- rfe(Class ~ ., data = data_train_prep,
+              sizes = subsets,
+              metric = "Accuracy",
+              # El accuracy es la proporción de clasificaciones correctas
+              rfeControl = ctrl_rfe,
+              ntree = 500)
+# Dentro de rfe() se pueden especificar argumentos para el modelo empleado, por
+# ejemplo, el hiperparámetro ntree=500.
+
+# Se muestra una tabla resumen con los resultados
+rf_rfe
+
+# El objeto rf_rfe almacena en optVariables las variables del mejor modelo.
+rf_rfe$optVariables
+
+# Guardamos en una variable los predictores filtrados para emplearlos 
+# posteriormente en el ajuste de los modelos.
+predictores_filtrados_rf <- as.formula(paste("Class", 
+                                             paste(rf_rfe$optVariables, 
+                                                   collapse=" + "), sep=" ~ "))
+
+```
+
+El resultado indica que el mejor modelo se consigue con 10 predictores. Estudiamos más a fondo los resultados de la selección:
+
+```{r select.var.rf.info}
+# Evolución del accuracy estimado en función del número de predictores incluido en el modelo.
+ggplot(data = rf_rfe$results, aes(x = Variables, y = Accuracy)) +
+  geom_line() +
+  scale_x_continuous(breaks  = unique(rf_rfe$results$Variables)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = Accuracy - AccuracySD, ymax = Accuracy + AccuracySD),
+                width = 0.2) +
+  geom_point(data = rf_rfe$results %>% slice(which.max(Accuracy)),
+             color = "red") +
+  theme_bw()
+
+```
+
+
+
+
+Realizamos un **Algoritmo Genético con CrossValidation**:
+
+
+```{r select.var.AG}
+# Control de entrenamiento
+ga_ctrl <- gafsControl(functions = rfGA,
+                       method = "cv",
+                       number = 5,
+                       allowParallel = TRUE,
+                       genParallel = TRUE, 
+                       verbose = FALSE)
+
+# Selección de predictores
+set.seed(10)
+rf_ga <- gafs(x = data_train_prep %>% select(-Class),
+              y = data_train_prep$Class,
+              iters = 10, 
+              popSize = 50,
+              gafsControl = ga_ctrl,
+              ntree = 100)
+
+# Se muestra una tabla resumen con los resultados
+rf_ga
+
+# El objeto rf_ga almacena en optVariables las variables del mejor modelo.
+rf_ga$optVariables
+
+# Guardamos en una variable los predictores filtrados para emplearlos 
+# posteriormente en el ajuste de los modelos.
+predictores_filtrados_ag <- as.formula(paste("Class", 
+                                             paste(rf_ga$optVariables, 
+                                                   collapse=" + "), sep=" ~ "))
+
+```
+
+El resultado indica que el mejor modelo se consigue con 6 predictores.
+
+
+### Métodos filtrado
+
+Realizamos un método de filtrado
+
+
+```{r select.var.filtrado}
+# FILTRADO DE PREDICTORES MEDIANTE ANOVA, RANDOM FOREST Y CV-REPETIDA
+
+# Se crea una semilla para cada partición y cada repetición: el vector debe
+# tener B+1 semillas donde B = particiones * repeticiones.
+particiones = 10
+repeticiones = 5
+set.seed(123)
+seeds <- sample.int(1000, particiones * repeticiones + 1)
+
+# Control del filtrado
+ctrl_filtrado <- sbfControl(functions = rfSBF, method = "repeatedcv",
+                            number = particiones, repeats = repeticiones,
+                            seeds = seeds, verbose = FALSE, 
+                            saveDetails = TRUE, allowParallel = TRUE)
+set.seed(234)
+rf_sbf <- sbf(Class ~ ., data = data_train_prep,
+              sbfControl = ctrl_filtrado,
+              # argumentos para el modelo de evaluación
+              ntree = 500)
+
+# Se muestra una tabla resumen con los resultados
+rf_sbf
+
+# El objeto rf_sbf almacena en optVariables las variables del mejor modelo.
+rf_sbf$optVariables
+
+# Guardamos en una variable los predictores filtrados para emplearlos 
+# posteriormente en el ajuste de los modelos.
+predictores_filtrados_rfSBF <- as.formula(paste("Class", 
+                                                paste(rf_sbf$optVariables, 
+                                                      collapse=" + "), sep=" ~ "))
+
+```
+
+
+El resultado indica que el mejor modelo se consigue con 8 predictores.
+
+
+
+### Conclusión selección de predictores
+
+Los métodos difieren en los resultados, por lo que probaremos los tres a la hora de entrenar los modelos para ver cual presenta mejor rendimiento.
+
+
+
+
+
+# Creación de modelos predictivos:
+
+Utilizamos el paquete caret para generar y entrenar los diferentes modelos de aprendizaje automático. Para ello en cada caso de proponcionam diferentes hiperparámetros y se seleccionan aqullo que general el modelo con mejor rendimiento.
+
+
+## Modelo k-Nearest Neighbor (KNN)
+
+Generamos el modelo KNN 
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+hiperparametros <- data.frame(k = c(5,10,15,20))
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_knn <- train(Class ~ ., data = data_train_prep,
+                    method = "knn",
+                    tuneGrid = hiperparametros,
+                    metric = "Accuracy",
+                    trControl = control_train)
+
+modelo_knn
+
+# REPRESENTACIÓN GRÁFICA
+library(ggplot2)
+ggplot(modelo_knn, highlight = TRUE) +
+  scale_x_continuous(breaks = hiperparametros$k) +
+  labs(title = "Evoluci?n del accuracy del modelo KNN", x = "K") +
+  theme_bw()
+# Predicciones
+predicciones_knn <- predict(modelo_knn, newdata = data_test_prep,
+                            type = "raw")
+predicciones_knn
+
+
+# Evaluación
+conf_mat_knn <- confusionMatrix(data = predicciones_knn, reference = data_test_prep$Class,
+                                positive = "LD")
+conf_mat_knn
+
+
+stats_class_knn <- data.frame(model         = "KNN",
+                              accuracy      = conf_mat_knn$overall[[1]],
+                              FN            = conf_mat_knn$table[2,1],
+                              FP            = conf_mat_knn$table[1,2],
+                              error.rate    = 1-conf_mat_knn$overall[[1]],
+                              kappa         = conf_mat_knn$overall[[2]],
+                              sensibilidad  = conf_mat_knn$byClass[[1]], 
+                              especificidad = conf_mat_knn$byClass[[2]], 
+                              precision     = conf_mat_knn$byClass[[5]], 
+                              recall        = conf_mat_knn$byClass[[6]], 
+                              f.measure     = conf_mat_knn$byClass[[7]])
+stats_class_knn
+```
+
+
+
+## Modelo Naive Bayes (NB)
+
+Generamos el modelo NB. 
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+hiperparametros <- expand.grid(usekernel = c(TRUE, FALSE),
+                               fL = c(0:5),
+                               adjust = c(1:5))
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_nb <- train(Class ~ ., data = data_train_prep,
+                   method = "nb",
+                   tuneGrid = hiperparametros,
+                   metric = "Accuracy",
+                   trControl = control_train)
+modelo_nb
+
+
+# REPRESENTACIÓN GRÁFICA
+plot(modelo_nb)
+
+# Predicciones
+predicciones_nb <- predict(modelo_nb, newdata = data_test_prep,
+                           type = "raw")
+predicciones_nb
+
+
+# Evaluación
+conf_mat_nb <- confusionMatrix(data = predicciones_nb, reference = data_test_prep$Class,
+                               positive = "LD")
+conf_mat_nb
+
+
+stats_class_nb <- data.frame(model         = "NB",
+                             accuracy      = conf_mat_nb$overall[[1]],
+                             FN            = conf_mat_nb$table[2,1],
+                             FP            = conf_mat_nb$table[1,2],
+                             error.rate    = 1-conf_mat_nb$overall[[1]],
+                             kappa         = conf_mat_nb$overall[[2]],
+                             sensibilidad  = conf_mat_nb$byClass[[1]], 
+                             especificidad = conf_mat_nb$byClass[[2]], 
+                             precision     = conf_mat_nb$byClass[[5]], 
+                             recall        = conf_mat_nb$byClass[[6]], 
+                             f.measure     = conf_mat_nb$byClass[[7]])
+stats_class_nb
+```
+
+
+
+## Modelo Artificial neural network (ANN)
+
+Generamos el modelo ANN. 
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+hiperparametros <- expand.grid(size = c(10, 20, 40, 60, 80, 90, 100,120),
+                               decay = c(0.0001))
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_ann <- train(Class ~ ., data = data_train_prep,
+                    method = "nnet",
+                    tuneGrid = hiperparametros,
+                    metric = "Accuracy",
+                    trControl = control_train,
+                    # Rango de inicializaci?n de los pesos
+                    rang = c(-0.7, 0.7),
+                    # Número m?ximo de pesos
+                    # se aumenta para poder incluir m?s meuronas
+                    MaxNWts = 2000,
+                    # Para que no se muestre cada iteraci?n por pantalla
+                    trace = FALSE)
+modelo_ann
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_ann, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo ANN") +
+  theme_bw()
+
+
+# Predicciones
+predicciones_ann <- predict(modelo_ann, newdata = data_test_prep,
+                            type = "raw")
+predicciones_ann
+
+
+# Evaluación
+conf_mat_ann <- confusionMatrix(data = predicciones_ann, reference = data_test_prep$Class,
+                                positive = "LD")
+conf_mat_ann
+
+
+stats_class_ann <- data.frame(model         = "ANN",
+                              accuracy      = conf_mat_ann$overall[[1]],
+                              FN            = conf_mat_ann$table[2,1],
+                              FP            = conf_mat_ann$table[1,2],
+                              error.rate    = 1-conf_mat_ann$overall[[1]],
+                              kappa         = conf_mat_ann$overall[[2]],
+                              sensibilidad  = conf_mat_ann$byClass[[1]], 
+                              especificidad = conf_mat_ann$byClass[[2]], 
+                              precision     = conf_mat_ann$byClass[[5]], 
+                              recall        = conf_mat_ann$byClass[[6]], 
+                              f.measure     = conf_mat_ann$byClass[[7]])
+stats_class_ann
+```
+
+
+## Modelo Multilayer perceptron (MLP)
+
+Generamos el modelo MLP.
+
+```{r}
+# Se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+# hiperparametros <- expand.grid(size = c(1:20),
+#                                decay = c(0.0001, 0.1, 0.5))
+
+hiperparametros <- expand.grid(size = c(1:5),
+                               decay = c(0.0001))
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_mlp <- train(Class ~ ., data = data_train_prep,
+                    method = "mlpWeightDecay",
+                    tuneGrid = hiperparametros,
+                    metric = "Accuracy",
+                    trControl = control_train,
+                    learnFunc = "Std_Backpropagation")
+modelo_mlp
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_mlp, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo MLP") +
+  theme_bw()
+
+
+# Predicciones
+predicciones_mlp <- predict(modelo_mlp, newdata = data_test_prep,
+                            type = "raw")
+predicciones_mlp
+
+
+# Evaluación
+conf_mat_mlp <- confusionMatrix(data = predicciones_mlp, reference = data_test_prep$Class,
+                                positive = "LD")
+conf_mat_mlp
+
+
+stats_class_mlp <- data.frame(model         = "MLP",
+                              accuracy      = conf_mat_mlp$overall[[1]],
+                              FN            = conf_mat_mlp$table[2,1],
+                              FP            = conf_mat_mlp$table[1,2],
+                              error.rate    = 1-conf_mat_mlp$overall[[1]],
+                              kappa         = conf_mat_mlp$overall[[2]],
+                              sensibilidad  = conf_mat_mlp$byClass[[1]], 
+                              especificidad = conf_mat_mlp$byClass[[2]], 
+                              precision     = conf_mat_mlp$byClass[[5]], 
+                              recall        = conf_mat_mlp$byClass[[6]], 
+                              f.measure     = conf_mat_mlp$byClass[[7]])
+stats_class_mlp
+```
+
+
+## Modelo Support vector machine linear kernel (SVM-lineal)
+
+Generamos el modelo SVM-lineal.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+hiperparametros <- data.frame(C = c(10,15,20,30,40,50))
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_svmlineal <- train(Class ~ ., data = data_train_prep,
+                          method = "svmLinear",
+                          tuneGrid = hiperparametros,
+                          metric = "Accuracy",
+                          trControl = control_train)
+
+modelo_svmlineal
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_svmlineal, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo SVMlineal") +
+  theme_bw()
+
+
+# Predicciones
+predicciones_svmlineal <- predict(modelo_svmlineal, newdata = data_test_prep,
+                                  type = "raw")
+predicciones_svmlineal
+
+
+# Evaluación
+conf_mat_svmlineal <- confusionMatrix(data = predicciones_svmlineal, reference = data_test_prep$Class,
+                                      positive = "LD")
+conf_mat_svmlineal
+
+
+stats_class_svmlineal <- data.frame(model         = "SVMlineal",
+                                    accuracy      = conf_mat_svmlineal$overall[[1]],
+                                    FN            = conf_mat_svmlineal$table[2,1],
+                                    FP            = conf_mat_svmlineal$table[1,2],
+                                    error.rate    = 1-conf_mat_svmlineal$overall[[1]],
+                                    kappa         = conf_mat_svmlineal$overall[[2]],
+                                    sensibilidad  = conf_mat_svmlineal$byClass[[1]], 
+                                    especificidad = conf_mat_svmlineal$byClass[[2]], 
+                                    precision     = conf_mat_svmlineal$byClass[[5]], 
+                                    recall        = conf_mat_svmlineal$byClass[[6]], 
+                                    f.measure     = conf_mat_svmlineal$byClass[[7]])
+stats_class_svmlineal
+
+```
+
+
+## Modelo Support vector machine polynomial kernel (SVM-polynomial)
+
+Generamos el modelo SVM-polynomial.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+
+hiperparametros <- expand.grid(degree = c(2),
+                               scale = c(0.1,0.2,0.3,0.5),
+                               C = c(10,15,20,30,40,50))
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_svmPoly <- train(Class ~ ., data = data_train_prep,
+                        method = "svmPoly",
+                        tuneGrid = hiperparametros,
+                        metric = "Accuracy",
+                        trControl = control_train)
+
+modelo_svmPoly
+
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_svmPoly, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo SVMpoly") +
+  theme_bw()
+
+
+
+# Predicciones
+predicciones_svmPoly <- predict(modelo_svmPoly, newdata = data_test_prep,
+                                type = "raw")
+predicciones_svmPoly
+
+
+# Evaluación
+conf_mat_svmPoly <- confusionMatrix(data = predicciones_svmPoly, reference = data_test_prep$Class,
+                                    positive = "LD")
+conf_mat_svmPoly
+
+
+stats_class_svmPoly <- data.frame(model         = "SVMpoly",
+                                  accuracy      = conf_mat_svmPoly$overall[[1]],
+                                  FN            = conf_mat_svmPoly$table[2,1],
+                                  FP            = conf_mat_svmPoly$table[1,2],
+                                  error.rate    = 1-conf_mat_svmPoly$overall[[1]],
+                                  kappa         = conf_mat_svmPoly$overall[[2]],
+                                  sensibilidad  = conf_mat_svmPoly$byClass[[1]], 
+                                  especificidad = conf_mat_svmPoly$byClass[[2]], 
+                                  precision     = conf_mat_svmPoly$byClass[[5]], 
+                                  recall        = conf_mat_svmPoly$byClass[[6]], 
+                                  f.measure     = conf_mat_svmPoly$byClass[[7]])
+stats_class_svmPoly
+```
+
+
+## Modelo Support vector machine radial kernel (SVM-radial)
+
+Generamos el modelo SVM-radial.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+
+hiperparametros <- expand.grid(sigma = c(0.1, 0.3, 0.5,1,3,5,10),
+                               C = c(10,15,20,30,40,50))
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_svmRadial <- train(Class ~ ., data = data_train_prep,
+                          method = "svmRadial",
+                          tuneGrid = hiperparametros,
+                          metric = "Accuracy",
+                          trControl = control_train)
+modelo_svmRadial
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_svmRadial, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo SVMradial") +
+  theme_bw()
+
+
+
+# Predicciones
+predicciones_svmRadial <- predict(modelo_svmRadial, newdata = data_test_prep,
+                                  type = "raw")
+predicciones_svmRadial
+
+
+# Evaluación
+conf_mat_svmRadial <- confusionMatrix(data = predicciones_svmRadial, reference = data_test_prep$Class,
+                                      positive = "LD")
+conf_mat_svmRadial
+
+
+stats_class_svmRadial <- data.frame(model         = "SVMradial",
+                                    accuracy      = conf_mat_svmRadial$overall[[1]],
+                                    FN            = conf_mat_svmRadial$table[2,1],
+                                    FP            = conf_mat_svmRadial$table[1,2],
+                                    error.rate    = 1-conf_mat_svmRadial$overall[[1]],
+                                    kappa         = conf_mat_svmRadial$overall[[2]],
+                                    sensibilidad  = conf_mat_svmRadial$byClass[[1]], 
+                                    especificidad = conf_mat_svmRadial$byClass[[2]], 
+                                    precision     = conf_mat_svmRadial$byClass[[5]], 
+                                    recall        = conf_mat_svmRadial$byClass[[6]], 
+                                    f.measure     = conf_mat_svmRadial$byClass[[7]])
+stats_class_svmRadial
+```
+
+
+## Modelo Decision tree C5.0 sin hiperparámetros (C5.0)
+
+Generamos el modelo C5.0.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+hiperparametros <- data.frame(parameter = "none")
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_C5.0Tree <- train(Class ~ ., data = data_train_prep,
+                         method = "C5.0Tree",
+                         tuneGrid = hiperparametros,
+                         metric = "Accuracy",
+                         trControl = control_train)
+modelo_C5.0Tree
+
+
+summary(modelo_C5.0Tree$finalModel)
+
+
+# Predicciones
+predicciones_C5.0Tree <- predict(modelo_C5.0Tree, newdata = data_test_prep,
+                                 type = "raw")
+predicciones_C5.0Tree
+
+
+# Evaluación
+conf_mat_C5.0Tree <- confusionMatrix(data = predicciones_C5.0Tree, reference = data_test_prep$Class,
+                                     positive = "LD")
+conf_mat_C5.0Tree
+
+
+stats_class_C5.0Tree <- data.frame(model         = "C5.0Tree",
+                                   accuracy      = conf_mat_C5.0Tree$overall[[1]],
+                                   FN            = conf_mat_C5.0Tree$table[2,1],
+                                   FP            = conf_mat_C5.0Tree$table[1,2],
+                                   error.rate    = 1-conf_mat_C5.0Tree$overall[[1]],
+                                   kappa         = conf_mat_C5.0Tree$overall[[2]],
+                                   sensibilidad  = conf_mat_C5.0Tree$byClass[[1]], 
+                                   especificidad = conf_mat_C5.0Tree$byClass[[2]], 
+                                   precision     = conf_mat_C5.0Tree$byClass[[5]], 
+                                   recall        = conf_mat_C5.0Tree$byClass[[6]], 
+                                   f.measure     = conf_mat_C5.0Tree$byClass[[7]])
+stats_class_C5.0Tree
+```
+
+
+## Modelo Decision tree C5.0 con hiperparámetros (C5.0)
+
+Generamos el modelo C5.0.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+
+# hiperparametros <- expand.grid(trials = c(10:15),
+#                                model = "tree",
+#                                winnow = c(TRUE, FALSE))
+
+hiperparametros <- expand.grid(trials = c(10:15),
+                               model = "tree",
+                               winnow = c(FALSE))
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_C5.0 <- train(Class ~ ., data = data_train_prep,
+                     method = "C5.0",
+                     tuneGrid = hiperparametros,
+                     metric = "Accuracy",
+                     trControl = control_train)
+modelo_C5.0
+
+
+summary(modelo_C5.0$finalModel)
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_C5.0, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo C5.0") +
+  theme_bw()
+
+
+# Predicciones
+predicciones_C5.0 <- predict(modelo_C5.0, newdata = data_test_prep,
+                             type = "raw")
+predicciones_C5.0
+
+
+# Evaluación
+conf_mat_C5.0 <- confusionMatrix(data = predicciones_C5.0, reference = data_test_prep$Class,
+                                 positive = "LD")
+conf_mat_C5.0
+
+
+stats_class_C5.0 <- data.frame(model         = "C5.0",
+                               accuracy      = conf_mat_C5.0$overall[[1]],
+                               FN            = conf_mat_C5.0$table[2,1],
+                               FP            = conf_mat_C5.0$table[1,2],
+                               error.rate    = 1-conf_mat_C5.0$overall[[1]],
+                               kappa         = conf_mat_C5.0$overall[[2]],
+                               sensibilidad  = conf_mat_C5.0$byClass[[1]], 
+                               especificidad = conf_mat_C5.0$byClass[[2]], 
+                               precision     = conf_mat_C5.0$byClass[[5]], 
+                               recall        = conf_mat_C5.0$byClass[[6]], 
+                               f.measure     = conf_mat_C5.0$byClass[[7]])
+stats_class_C5.0
+```
+
+
+## Modelo Decision tree J48 (J48)
+
+Generamos el modelo J48.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+hiperparametros <- expand.grid(C = c(0.5),
+                               M = c(2:10))
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros))
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+library(RWeka)
+set.seed(342)
+modelo_J48 <- train(Class ~ ., data = data_train_prep,
+                    method = "J48",
+                    tuneGrid = hiperparametros,
+                    metric = "Accuracy",
+                    trControl = control_train)
+modelo_J48
+
+
+summary(modelo_J48$finalModel)
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_J48, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo J48") +
+  theme_bw()
+
+
+# Predicciones
+predicciones_J48 <- predict(modelo_J48, newdata = data_test_prep,
+                            type = "raw")
+predicciones_J48
+
+
+# Evaluación
+conf_mat_J48 <- confusionMatrix(data = predicciones_J48, reference = data_test_prep$Class,
+                                positive = "LD")
+conf_mat_J48
+
+
+stats_class_J48 <- data.frame(model         = "J48",
+                              accuracy      = conf_mat_J48$overall[[1]],
+                              FN            = conf_mat_J48$table[2,1],
+                              FP            = conf_mat_J48$table[1,2],
+                              error.rate    = 1-conf_mat_J48$overall[[1]],
+                              kappa         = conf_mat_J48$overall[[2]],
+                              sensibilidad  = conf_mat_J48$byClass[[1]], 
+                              especificidad = conf_mat_J48$byClass[[2]], 
+                              precision     = conf_mat_J48$byClass[[5]], 
+                              recall        = conf_mat_J48$byClass[[6]], 
+                              f.measure     = conf_mat_J48$byClass[[7]])
+stats_class_J48
+```
+
+
+## Modelo Random forest (RF)
+
+Generamos el modelo RF.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+
+hiperparametros <- expand.grid(mtry = c(1:10),
+                               min.node.size = c(4, 5, 10),
+                               splitrule = c("gini"))
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO 
+set.seed(342)
+modelo_rf <- train(Class ~ ., data = data_train_prep,
+                   method = "ranger",
+                   tuneGrid = hiperparametros,
+                   metric = "Accuracy",
+                   trControl = control_train,
+                   # Número de ?rboles ajustados
+                   num.trees = 500)
+modelo_rf
+
+summary(modelo_rf$finalModel)
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_rf, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo RF") +
+  theme_bw()
+
+
+# Predicciones
+predicciones_rf <- predict(modelo_rf, newdata = data_test_prep,
+                           type = "raw")
+predicciones_rf
+
+
+# Evaluación
+conf_mat_rf <- confusionMatrix(data = predicciones_rf, reference = data_test_prep$Class,
+                               positive = "LD")
+conf_mat_rf
+
+
+stats_class_rf <- data.frame(model         = "RF",
+                             accuracy      = conf_mat_rf$overall[[1]],
+                             FN            = conf_mat_rf$table[2,1],
+                             FP            = conf_mat_rf$table[1,2],
+                             error.rate    = 1-conf_mat_rf$overall[[1]],
+                             kappa         = conf_mat_rf$overall[[2]],
+                             sensibilidad  = conf_mat_rf$byClass[[1]], 
+                             especificidad = conf_mat_rf$byClass[[2]], 
+                             precision     = conf_mat_rf$byClass[[5]], 
+                             recall        = conf_mat_rf$byClass[[6]], 
+                             f.measure     = conf_mat_rf$byClass[[7]])
+stats_class_rf
+```
+
+
+## Modelo Logistic regression (LR)
+
+Generamos el modelo LR.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+hiperparametros <- data.frame(parameter = "none")
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_lrglm <- train(Class ~ ., data = data_train_prep,
+                      method = "glm",
+                      tuneGrid = hiperparametros,
+                      metric = "Accuracy",
+                      trControl = control_train,
+                      family = "binomial")
+modelo_lrglm
+
+
+summary(modelo_lrglm$finalModel)
+
+
+# Predicciones
+predicciones_lrglm <- predict(modelo_lrglm, newdata = data_test_prep,
+                              type = "raw")
+predicciones_lrglm
+
+
+# Evaluación
+conf_mat_lrglm <- confusionMatrix(data = predicciones_lrglm, reference = data_test_prep$Class,
+                                  positive = "LD")
+conf_mat_lrglm
+
+
+stats_class_lrglm <- data.frame(model         = "LRglm",
+                                accuracy      = conf_mat_lrglm$overall[[1]],
+                                FN            = conf_mat_lrglm$table[2,1],
+                                FP            = conf_mat_lrglm$table[1,2],
+                                error.rate    = 1-conf_mat_lrglm$overall[[1]],
+                                kappa         = conf_mat_lrglm$overall[[2]],
+                                sensibilidad  = conf_mat_lrglm$byClass[[1]], 
+                                especificidad = conf_mat_lrglm$byClass[[2]], 
+                                precision     = conf_mat_lrglm$byClass[[5]], 
+                                recall        = conf_mat_lrglm$byClass[[6]], 
+                                f.measure     = conf_mat_lrglm$byClass[[7]])
+stats_class_lrglm
+```
+
+
+## Modelo Penalized Multinomial Logistic Regression (PMLR)
+
+Generamos el modelo PMLR.
+
+```{r}
+# se recurre a validación cruzada repetida como método de validación.
+# Número de particiones y repeticiones
+particiones  <- 10
+repeticiones <- 5
+
+# hiperparametros <- data.frame(decay  = c(0.01,0.1,0.3,0.5))
+
+# hiperparametros <- data.frame(decay  = seq(0,0.1,length.out=10))
+
+hiperparametros <- data.frame(decay  = seq(0,0.5,length.out=20))
+
+
+set.seed(123)
+seeds <- vector(mode = "list", length = (particiones * repeticiones) + 1)
+for (i in 1:(particiones * repeticiones)) {
+  seeds[[i]] <- sample.int(1000, nrow(hiperparametros)) 
+}
+seeds[[(particiones * repeticiones) + 1]] <- sample.int(1000, 1)
+
+
+# DEFINICIÓN DEL ENTRENAMIENTO
+control_train <- trainControl(method = "repeatedcv", number = particiones,
+                              repeats = repeticiones, seeds = seeds,
+                              returnResamp = "final", verboseIter = FALSE,
+                              allowParallel = TRUE)
+
+# AJUSTE DEL MODELO
+set.seed(342)
+modelo_lrmulti <- train(Class ~ ., data = data_train_prep,
+                        method = "multinom",
+                        tuneGrid = hiperparametros,
+                        metric = "Accuracy",
+                        trControl = control_train,
+                        trace = FALSE)
+modelo_lrmulti
+
+
+summary(modelo_lrmulti$finalModel)
+
+
+# REPRESENTACIÓN GRÁFICA
+ggplot(modelo_lrmulti, highlight = TRUE) +
+  labs(title = "Evoluci?n del accuracy del modelo LRmulti") +
+  theme_bw()
+
+
+# Predicciones
+predicciones_lrmulti <- predict(modelo_lrmulti, newdata = data_test_prep,
+                                type = "raw")
+predicciones_lrmulti
+
+
+# Evaluación
+conf_mat_lrmulti <- confusionMatrix(data = predicciones_lrmulti, reference = data_test_prep$Class,
+                                    positive = "LD")
+conf_mat_lrmulti
+
+
+stats_class_lrmulti <- data.frame(model         = "LRmulti",
+                                  accuracy      = conf_mat_lrmulti$overall[[1]],
+                                  FN            = conf_mat_lrmulti$table[2,1],
+                                  FP            = conf_mat_lrmulti$table[1,2],
+                                  error.rate    = 1-conf_mat_lrmulti$overall[[1]],
+                                  kappa         = conf_mat_lrmulti$overall[[2]],
+                                  sensibilidad  = conf_mat_lrmulti$byClass[[1]], 
+                                  especificidad = conf_mat_lrmulti$byClass[[2]], 
+                                  precision     = conf_mat_lrmulti$byClass[[5]], 
+                                  recall        = conf_mat_lrmulti$byClass[[6]], 
+                                  f.measure     = conf_mat_lrmulti$byClass[[7]])
+stats_class_lrmulti
+```
+
+
+
+## Rendimiento de los modelos:
+
+```{r}
+# Tabla resumen del rendimiento de los diferentes modelos:
+stats_models <- rbind(stats_class_knn, 
+                      stats_class_nb, 
+                      stats_class_ann,
+                      stats_class_mlp,
+                      stats_class_svmlineal,
+                      stats_class_svmPoly,
+                      stats_class_svmRadial,
+                      stats_class_C5.0Tree,
+                      stats_class_C5.0,
+                      stats_class_J48,
+                      stats_class_rf,
+                      stats_class_lrglm,
+                      stats_class_lrmulti)
+
+# Ordenamos la tabla por la precisión y lo guardamos
+stats_models_prec <- stats_models %>% arrange(desc(precision))
+
+knitr::kable(stats_models_prec, digits = 3, caption = "Métricas del rendimiento de los modelos de aprendizaje automático.")
+
+```
+
+En base a estos resultados, el mejor modelo es ANN, ya que a pesar de no llegar al 80% de precisión es el que presenta mejores resultados en el resto de métricas de rendimiento, por ejemplo menor número de falsos negativos a cambio de aumentar un poco los falsos positivos lo que genera un mayor recall. Otras opciones pueden ser RF, LRglm Y LRmulti.
+
+
+
