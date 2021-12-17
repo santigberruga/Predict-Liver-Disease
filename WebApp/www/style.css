@@ -1,0 +1,263 @@
+/* Liver Disease Prediction Web Application */
+/*      By Santiago Gonzalez Berruga        */
+
+/*General*/
+* {
+	font-family: 'Source Sans Pro',sans-serif;
+	font-weight: normal;
+}
+
+label {
+    font-weight: normal;
+}
+
+.content {
+    padding: 15px 0 0;
+}
+
+.boxMain {
+    padding-left: 15px;
+    padding-right: 15px;
+    height: 100%;
+    min-height: calc(100vh - 196px);
+}
+
+
+
+/*Pop-ups*/
+
+.p-form {
+	display: flex; 
+	align-items: center;
+	padding-left: 15px;
+    padding-right: 15px;
+    margin: 5px 0 0;
+}
+
+i.fa.fa-info-circle:hover {
+    color: #8acff7;
+}
+
+.sweet-alert .sa-icon.sa-info {
+    border-color: #8acff7 !important;
+}
+
+.sweet-alert .sa-icon.sa-info::before {
+    background-color: #8acff7 !important;
+}
+
+.sweet-alert .sa-icon.sa-info::after {
+    background-color: #8acff7 !important;
+}
+
+.sweet-alert .sa-icon.sa-success .sa-placeholder {
+    border: 4px solid rgb(165 220 134 / 45%) !important;
+}
+
+
+
+/*Radio buttons*/
+
+input[type="radio"] {
+  display: none;
+}
+
+input[type="radio"] + *::before {
+    content: "";
+    display: -webkit-inline-box;
+    vertical-align: inherit;
+    width: 11px;
+    height: 11px;
+    margin-right: 6px;
+    border-radius: 50%;
+    border-style: solid;
+    border-width: 1px;
+    border-color: white;
+    background: white;
+}
+
+input[type="radio"]:checked + *::before {
+  background: radial-gradient(#5cb3e6 0%, #5cb3e6 50%, white 35%, white);
+  border-color: white;
+}
+
+.shiny-input-radiogroup {
+	margin-bottom: 5px;
+}
+
+/*File input*/
+.input-group .form-control:last-child {
+	border-radius: 0 4px 4px 0 !important;
+}
+
+.progress {
+	border-radius: 0 0 6px 6px !important;
+	z-index: -1;
+    margin-top: -2px;
+    position: relative;
+}
+
+
+/*Manual form*/
+
+#manual-form {
+	margin-bottom: 25px;
+}
+
+#manual-form .control-label {
+	color: white !important;
+	margin: 0 0 2px;
+}
+
+#manual-form .shiny-input-container {
+	margin-bottom: 5px;
+	padding-top: 6px;
+    padding-bottom: 6px;
+    height: 56px;
+}
+
+#manual-form input {
+	border-radius: 4px;
+}
+
+#manual-form .form-control {
+	height: 27px;
+    padding: 1px 12px 2px;
+}
+
+#manual-form .selectize-input {
+	min-height: 27px;
+    height: 27px;
+    padding: 2px 12px;
+}
+
+.form-control-feedback {
+	display: -webkit-inline-box;
+}
+
+#Age-text {
+	position: relative;
+	top: -24px;
+    right: -85px;
+}
+
+#TB-text,
+#DB-text,
+#Alkphos-text,
+#Sgpt-text,
+#Sgot-text,
+#TP-text,
+#ALB-text,
+#AG-text 
+{
+	position: relative;
+    top: -24px;
+    right: -148px;
+}
+
+#Gender-icon {
+	margin: 0 !important;
+	top: -1px;
+	right: -15px;
+}
+
+
+/*Buttons*/
+
+.form-buttons {
+	display: flex;
+	justify-content: space-between;
+	padding: 0px 30px;
+}
+
+#submit, #clear, #downloadPred {
+	border: none;
+	margin: 0;
+}
+
+#submit, #downloadPred {
+	background: #3c8dbc;
+	color: #fff;
+}
+
+#submit:hover, #downloadPred:hover {
+	background: #367fa9;
+}
+
+#downloadReport {
+    background-color: #367fa9;
+}
+
+#downloadReport:hover, #help:hover {
+    background: #3ea3d1;
+}
+
+.progressjs-theme-blueOverlayRadiusWithPercentBar {
+    background-color: #3ea3d1 !important;
+    border-radius: 0 !important;
+}
+
+.progressjs-inner {
+	background-color: #325778 !important;
+	border-radius: 0 !important;
+}
+
+.progressjs-percent {
+    color: #FFFFFF !important;
+    opacity: 0.8 !important;
+}
+
+
+/*Overlay of tables*/
+.box-body {
+    overflow: auto;
+}
+
+
+/*Plots*/
+.box-body .selectize-control {
+	width: 10em;
+}
+
+
+/*Footer*/
+footer {
+    text-align: center;
+    background-color: #222d32;
+    padding: 20px;
+    color: white;
+}
+
+.footerLinks {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.footerLinks div, .CreativeCommons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.footerLinks i {
+    font-size: 16px;
+    color: white;
+    margin-right: 6px;
+}
+
+.footerLinks p {
+    color: white;
+    margin: 0;
+}
+
+.linkedinLink {
+    margin-right: 20px;
+}
+
+.CreativeCommons {
+    margin-top: 10px;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+

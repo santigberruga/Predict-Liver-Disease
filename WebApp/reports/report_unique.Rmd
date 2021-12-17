@@ -1,0 +1,172 @@
+---
+title: "Liver Disease Prediction Report"
+subtitle: "Generated with Liver Disease Predictions App"
+author: "By Santiago Gonzalez Berruga"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  pdf_document:
+    latex_engine: xelatex
+    fig_caption: true
+    
+header-includes:
+    - \usepackage{fancyhdr}
+    
+params:
+  prediction: NA
+  data_raw: !r NA
+  data_pred: !r NA
+
+---
+<!-- QR image -->
+\addtolength{\headheight}{1.0cm}
+\pagestyle{fancyplain}
+\rhead{\includegraphics[height=1.2cm]{Web_QR.png}}
+\renewcommand{\headrulewidth}{0pt}
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NULL,
+                      warning = FALSE, message = FALSE, 
+                      fig.align="center")
+```
+
+```{r packages, include=FALSE}
+# Load packages
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(rlang)
+```
+
+```{r script_plots, include=FALSE}
+# Load script with plots functions
+source("Script_Graficos_Report.R")
+```
+
+
+# Results:
+
+The posible results of the prediction are *LD* (Liver disease patient) and *H* (Non liver disease patient).
+
+The result* of the prediction with a 77% of precision is:  `r params$prediction`
+
+\* Please note that these results are not a final diagnosis, but a support tool for specialists. The results have been generated with the \textcolor{blue}{\href{https://gonzalezberrugasantiago.shinyapps.io/Predict_Liver_Disease/}{Liver Disease Predictions web application}}
+
+
+# Data:
+
+The data provided to make the prediction are:
+
+```{r echo=FALSE}
+# Data table
+params$data_raw %>%
+kable(booktabs = TRUE,format = "latex",digits = 1,
+longtable=TRUE) %>%
+kable_styling(
+latex_options = c("striped", "condensed","repeat_header"),
+position = "center",
+full_width = FALSE,
+repeat_header_text = "Continuation",
+repeat_header_continued="Continue on the next page")
+
+
+```
+
+
+\newpage
+
+# Plots:
+
+The following graphs show the data used to train the predictive model and overlap the data and results used in the prediction, allowing a better understanding of the results:
+
+
+```{r pie_plots, echo=FALSE, fig.height=4, fig.width=8}
+# Pie plots
+p1 <- plot_gender(dataset = params$data_pred) # Gender
+p2 <- plot_class(dataset = params$data_pred)  # Class
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+```
+
+
+
+
+
+```{r hist_box_plots, echo=FALSE, fig.height=3.5, fig.width=8}
+# Distplots and Boxplots
+
+## Age
+p1 <- plot_distplot(dataset = params$data_pred, var = Age, var_name = "Age") 
+p2 <- plot_boxplot( dataset = params$data_pred, var = Age, var_name = "Age")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+## TB
+p1 <- plot_distplot(dataset = params$data_pred, var = TB, var_name = "TB")
+p2 <- plot_boxplot( dataset = params$data_pred, var = TB, var_name = "TB")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+## Alkphos
+p1 <- plot_distplot(dataset = params$data_pred, var = Alkphos, var_name = "Alkphos")
+p2 <- plot_boxplot( dataset = params$data_pred, var = Alkphos, var_name = "Alkphos")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+## Sgpt
+p1 <- plot_distplot(dataset = params$data_pred, var = Sgpt, var_name = "Sgpt")
+p2 <- plot_boxplot( dataset = params$data_pred, var = Sgpt, var_name = "Sgpt")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+## Sgot
+p1 <- plot_distplot(dataset = params$data_pred, var = Sgot, var_name = "Sgot")
+p2 <- plot_boxplot( dataset = params$data_pred, var = Sgot, var_name = "Sgot")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+## TP
+p1 <- plot_distplot(dataset = params$data_pred, var = TP, var_name = "TP")
+p2 <- plot_boxplot( dataset = params$data_pred, var = TP, var_name = "TP")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+## ALB
+p1 <- plot_distplot(dataset = params$data_pred, var = ALB, var_name = "ALB")
+p2 <- plot_boxplot( dataset = params$data_pred, var = ALB, var_name = "ALB")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+## AG
+p1 <- plot_distplot(dataset = params$data_pred, var = AG, var_name = "AG")
+p2 <- plot_boxplot( dataset = params$data_pred, var = AG, var_name = "AG")
+final_plot <- ggarrange(p1, p2, legend = "top")
+final_plot
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
