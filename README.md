@@ -58,19 +58,19 @@ We also carry out different validations of the data provided by the users and cr
 
 ![form validations](https://user-images.githubusercontent.com/96242441/146653514-10a0755f-35fb-4afd-9188-1ffcfcb0df37.png)
 
-![popup_fail](https://user-images.githubusercontent.com/96242441/146653520-5333caa1-b0a4-4a07-8e5f-26ba7a2d80ff.png)
+![popup fail](https://user-images.githubusercontent.com/96242441/146653520-5333caa1-b0a4-4a07-8e5f-26ba7a2d80ff.png)
 
-![popup_success](https://user-images.githubusercontent.com/96242441/146653524-e296dc7c-e38b-4a72-af0d-0a2a42744eea.png)
+![popup success](https://user-images.githubusercontent.com/96242441/146653524-e296dc7c-e38b-4a72-af0d-0a2a42744eea.png)
 
 
 Finally, we look at the results of the predictions made with the application:
 
 * **Results of Unique Prediction**
 
-![pred_unique_full](https://user-images.githubusercontent.com/96242441/146653559-829ba001-adeb-4282-bf35-5e53a4345ffa.png)
+![Results of Unique Prediction](https://user-images.githubusercontent.com/96242441/146653559-829ba001-adeb-4282-bf35-5e53a4345ffa.png)
 
 * **Results of Multiple Prediction**
 
-![pred_multi_full](https://user-images.githubusercontent.com/96242441/146653565-3513483e-310b-4f07-88e6-e05bc2a14114.png)
+![Results of Multiple Prediction](https://user-images.githubusercontent.com/96242441/146653565-3513483e-310b-4f07-88e6-e05bc2a14114.png)
 
 
